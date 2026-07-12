@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cairn — a Brown course-decision copilot</title>
+<style>
+  :root{
+    --bg:#f4f2ec; --panel:#fffdf8; --ink:#20242b; --muted:#6b7280; --line:#e2ddd2;
+    --brand:#8a3324; --brand2:#b5552f; --good:#2f7d55; --warn:#c2410c; --chip:#efe9dc;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.5 ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif}
+  a{color:var(--brand)}
+  header{padding:1rem 1.25rem;border-bottom:1px solid var(--line);display:flex;
+         align-items:baseline;gap:.6rem;flex-wrap:wrap;background:var(--panel)}
+  header h1{font-size:1.25rem;margin:0;letter-spacing:-.01em}
+  header .stone{color:var(--brand);font-weight:800}
+  header .tag{font-size:.72rem;color:var(--muted);border:1px solid var(--line);
+              border-radius:999px;padding:.1rem .5rem}
+  header .src{margin-left:auto;font-size:.76rem;color:var(--muted)}
+  .banner{background:#fff7ed;border-bottom:1px solid var(--line);color:var(--warn);
+          font-size:.82rem;padding:.5rem 1.25rem}
+  main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1rem;
+       max-width:1200px;margin:1rem auto;padding:0 1.25rem}
+  @media (max-width:820px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .card h2{font-size:.95rem;margin:0;padding:.8rem 1rem;border-bottom:1px solid var(--line)}
+  .card h2 small{color:var(--muted);font-weight:400}
+  /* discovery */
+  .ask{padding:1rem}
+  .ask textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:.7rem;
+                font:inherit;resize:vertical;min-height:64px;background:#fff}
+  .ask .ex{display:flex;flex-wrap:wrap;gap:.4rem;margin:.6rem 0}
+  .ask .ex button{font-size:.76rem;background:var(--chip);border:1px solid var(--line);
+                  border-radius:999px;padding:.25rem .6rem;cursor:pointer;color:var(--ink)}
+  .go{margin-top:.4rem;background:var(--brand);color:#fff;border:0;border-radius:9px;
+      padding:.55rem 1rem;font-weight:600;cursor:pointer}
+  .go:hover{background:var(--brand2)}
+  .results{padding:0 1rem 1rem}
+  .rec{border:1px solid var(--line);border-radius:10px;padding:.7rem .8rem;margin-top:.7rem;background:#fff}
+  .rec .top{display:flex;justify-content:space-between;gap:.5rem;align-items:baseline}
+  .rec .code{font-weight:700}
+  .rec .ttl{color:var(--muted);font-size:.86rem}
+  .rec .why{font-size:.84rem;margin:.35rem 0 .5rem}
+  .rec .add{font-size:.78rem;border:1px solid var(--brand);color:var(--brand);background:#fff;
+            border-radius:7px;padding:.2rem .55rem;cursor:pointer}
+  .rec .add:hover{background:var(--brand);color:#fff}
+  .pill{display:inline-block;font-size:.74rem;border-radius:6px;padding:.05rem .4rem;margin-right:.3rem}
+  .p-rate{background:#eaf6ef;color:var(--good)}
+  .p-load{background:#fdf0e6;color:var(--warn)}
+  .p-meet{background:#eef1f6;color:#3b5bdb}
+  /* board */
+  .board{padding:1rem}
+  .empty{color:var(--muted);font-size:.9rem;padding:1rem 0}
+  table{width:100%;border-collapse:collapse;font-size:.86rem}
+  th,td{text-align:left;padding:.5rem .5rem;border-top:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:.76rem}
+  td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+  tr.drop{opacity:.45}
+  .status button{font-size:.72rem;border:1px solid var(--line);background:#fff;border-radius:6px;
+                 padding:.12rem .4rem;cursor:pointer;margin-right:.2rem}
+  .status button.on{border-color:var(--brand);color:var(--brand);font-weight:700}
+  .conflict{color:var(--warn);font-size:.76rem;font-weight:600}
+  .summary{padding:.8rem 1rem;border-top:1px solid var(--line);font-size:.88rem;background:#fffdf8}
+  .summary b{font-variant-numeric:tabular-nums}
+  .summary .over{color:var(--warn)}
+  footer{max-width:1200px;margin:0 auto 2rem;padding:1rem 1.25rem;color:var(--muted);font-size:.8rem}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="stone">▲</span> Cairn</h1>
+  <span class="tag">Brown course-decision copilot</span>
+  <span class="src" id="src">loading…</span>
+</header>
+<div class="banner" id="banner" style="display:none"></div>
+
+<main>
+  <section class="card">
+    <h2>1 · Find courses <small>— tell it what you want</small></h2>
+    <div class="ask">
+      <textarea id="q" placeholder="e.g. I'm a sophomore into CS and stats, want something applied under ~8 hrs/week, mornings free"></textarea>
+      <div class="ex" id="examples"></div>
+      <button class="go" id="go">Suggest courses →</button>
+    </div>
+    <div class="results" id="results"></div>
+  </section>
+
+  <section class="card">
+    <h2>2 · Decide <small>— keep / maybe / drop</small></h2>
+    <div class="board">
+      <div id="boardBody"><div class="empty">Add courses from the left to compare them here — with schedule conflicts and total workload flagged.</div></div>
+    </div>
+    <div class="summary" id="summary" style="display:none"></div>
+  </section>
+</main>
+
+<footer>
+  Ratings & workload from <a href="https://thecriticalreview.org">The Critical Review</a>
+  (Brown's student-run course reviews); offerings & times from
+  <a href="https://cab.brown.edu">Courses@Brown</a>. Cairn reasons over this data and never
+  invents a number. Schedule conflicts are computed exactly, not guessed.
+</footer>
+
+<script>
+// ---------- data load: real (local, gitignored) → public sample fallback ----------
+let COURSES = [];
+async function load(){
+  const src = document.getElementById('src');
+  for (const [file, label, illustrative] of [
+        ['data/courses.local.json','real Critical Review data (local)', false],
+        ['data/courses.sample.json','illustrative sample', true]]) {
+    try {
+      const r = await fetch(file, {cache:'no-store'});
+      if (!r.ok) continue;
+      COURSES = await r.json();
+      src.textContent = COURSES.length + ' courses · ' + label;
+      if (illustrative) {
+        const b = document.getElementById('banner');
+        b.style.display='block';
+        b.textContent='Demo mode: course codes/titles/times are real (public catalog), but ratings shown here are illustrative — the real Critical Review data runs locally only.';
+      }
+      return;
+    } catch(e){}
+  }
+  src.textContent = 'no data found';
+}
+
+// ---------- meeting-time parsing + conflict detection (deterministic) ----------
+const DAYSEQ = ['Su','M','T','W','Th','F','S'];
+function parseDays(tok){
+  const out=[]; let i=0;
+  while(i<tok.length){
+    if(tok.substr(i,2)==='Th'){out.push('Th');i+=2;}
+    else if(tok.substr(i,2)==='Su'){out.push('Su');i+=2;}
+    else {const c=tok[i]; if('MTWFS'.includes(c))out.push(c); i+=1;}
+  }
+  return out;
+}
+function toMin(part, merid){
+  let m = part.match(/(\d{1,2})(?::(\d{2}))?\s*([ap])?/i);
+  if(!m) return null;
+  let h=+m[1], min=m[2]?+m[2]:0; const mer=(m[3]||merid||'').toLowerCase();
+  if(mer==='p' && h!==12) h+=12;
+  if(mer==='a' && h===12) h=0;
+  return h*60+min;
+}
+function parseMeets(str){
+  if(!str || /TBA/i.test(str)) return [];
+  const blocks = str.split(';').map(s=>s.trim());
+  const seen = new Set(); const out=[];
+  for(const b of blocks){
+    const m = b.match(/^([A-Za-z]+)\s+(.+)$/); if(!m) continue;
+    const days = parseDays(m[1]);
+    const tm = m[2].match(/([0-9:apAP]+)\s*-\s*([0-9:apAP]+)/); if(!tm) continue;
+    const endMer = (tm[2].match(/([ap])/i)||[])[1];
+    let start = toMin(tm[1], endMer), end = toMin(tm[2]);
+    if(start!=null && end!=null && start>end) start = toMin(tm[1], endMer==='a'?'p':'a');
+    const key = days.join('')+start+end;
+    if(seen.has(key)) continue; seen.add(key);
+    out.push({days, start, end});
+  }
+  return out;
+}
+function conflicts(a, b){
+  for(const x of parseMeets(a)) for(const y of parseMeets(b))
+    if(x.days.some(d=>y.days.includes(d)) && x.start < y.end && y.start < x.end) return true;
+  return false;
+}
+
+// ---------- discovery: constraint parse + grounded ranking (keyless) ----------
+const NUM = c => parseInt((c.code.match(/\d+/)||[0])[0],10);
+function parseQuery(q){
+  q = q.toLowerCase();
+  const c = {maxHours:null, interests:[], level:null, days:{avoid:[],prefer:null}, wantRated:false};
+  let m = q.match(/(?:under|less than|below|<|max)\s*~?\s*(\d{1,2})\s*(?:hr|hour)/);
+  if(m) c.maxHours = +m[1];
+  else if(/\blight\b|\beasy\b|\bmanageable\b|\blow ?workload\b/.test(q)) c.maxHours = 7;
+  if(/\bintro|beginner|first|foundational\b/.test(q)) c.level='intro';
+  if(/\badvanced|upper|grad|graduate\b/.test(q)) c.level='advanced';
+  if(/\bgood prof|highly rated|well.?taught|best\b/.test(q)) c.wantRated=true;
+  if(/\bmorning/.test(q)) c.days.prefer='am';
+  if(/\bafternoon/.test(q)) c.days.prefer='pm';
+  if(/no friday|friday.?free|avoid friday/.test(q)) c.days.avoid.push('F');
+  // interest keywords: dept codes + salient title words
+  const stop = new Set('i im a the to and or of in for with want under over hrs hours hour something course courses class sophomore junior senior freshman year that this like into free my me under'.split(' '));
+  c.interests = q.replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>2 && !stop.has(w));
+  return c;
+}
+function scoreCourse(course, c){
+  let s=0; const reasons=[];
+  const title=(course.title||'').toLowerCase(), dept=course.dept.toLowerCase();
+  let hits=0;
+  for(const w of c.interests){
+    if(dept===w || title.includes(w)){hits++;}
+  }
+  if(hits){s+=hits*3; }
+  // rating always contributes; extra weight if they asked for quality
+  const cr=course.course_rating||0; s += cr*(c.wantRated?1.6:1);
+  // workload cap
+  if(c.maxHours!=null){
+    if(course.avg_hours!=null && course.avg_hours>c.maxHours) return null; // hard filter
+    s += 1.5; // rewarded for being under cap
+  }
+  // level
+  const n=NUM(course);
+  if(c.level==='intro'){ if(n<1000)s+=2; else s-=1.5; }
+  if(c.level==='advanced'){ if(n>=1000)s+=1.5; }
+  // day prefs
+  const meets=parseMeets(course.meets);
+  if(c.days.avoid.length && meets.some(mt=>mt.days.some(d=>c.days.avoid.includes(d)))) s-=3;
+  if(c.days.prefer && meets.length){
+    const am = meets.every(mt=>mt.start<12*60);
+    if((c.days.prefer==='am'&&am)||(c.days.prefer==='pm'&&!am)) s+=1;
+  }
+  // build grounded reason (only cites real fields)
+  if(course.course_rating!=null) reasons.push(course.course_rating.toFixed(1)+'★ course');
+  if(course.avg_hours!=null) reasons.push('~'+course.avg_hours.toFixed(1)+' hrs/wk');
+  if(hits) reasons.push('matches ‘'+c.interests.filter(w=>title.includes(w)||dept===w).slice(0,2).join(', ')+'’');
+  return {course, s, reasons, hits};
+}
+function suggest(q){
+  const c = parseQuery(q);
+  let scored = COURSES.map(co=>scoreCourse(co,c)).filter(Boolean);
+  // if they named interests, require at least one hit; else fall back to top-rated
+  if(c.interests.some(w=>COURSES.some(co=>co.dept.toLowerCase()===w||(co.title||'').toLowerCase().includes(w))))
+    scored = scored.filter(r=>r.hits>0);
+  scored.sort((a,b)=>b.s-a.s);
+  return scored.slice(0,6);
+}
+
+// ---------- shortlist / decision board ----------
+const board = []; // {course, status}
+function addToBoard(code){
+  if(board.some(b=>b.course.code===code)) return;
+  const course = COURSES.find(c=>c.code===code); if(!course) return;
+  board.push({course, status:'keep'});
+  renderBoard();
+}
+function setStatus(code, st){ const b=board.find(x=>x.course.code===code); if(b){b.status=st; renderBoard();} }
+function removeFromBoard(code){ const i=board.findIndex(b=>b.course.code===code); if(i>=0){board.splice(i,1); renderBoard();} }
+
+function renderBoard(){
+  const body=document.getElementById('boardBody'), sum=document.getElementById('summary');
+  if(!board.length){ body.innerHTML='<div class="empty">Add courses from the left to compare them here — with schedule conflicts and total workload flagged.</div>'; sum.style.display='none'; return; }
+  const kept = board.filter(b=>b.status!=='drop');
+  const rows = board.map(b=>{
+    const c=b.course;
+    const conflict = b.status!=='drop' && kept.some(o=>o.course.code!==c.code && conflicts(c.meets,o.course.meets));
+    const st = s => `<button class="${b.status===s?'on':''}" onclick="setStatus('${c.code}','${s}')">${s}</button>`;
+    return `<tr class="${b.status==='drop'?'drop':''}">
+      <td><b>${c.code}</b><br><span style="color:var(--muted);font-size:.8rem">${c.title||''}</span>
+          ${conflict?'<div class="conflict">⚠ time conflict</div>':''}</td>
+      <td class="num">${c.course_rating!=null?c.course_rating.toFixed(1)+'★':'—'}</td>
+      <td class="num">${c.avg_hours!=null?c.avg_hours.toFixed(1)+'h':'—'}</td>
+      <td class="num">${c.meets||'—'}</td>
+      <td class="status">${st('keep')}${st('maybe')}${st('drop')}
+          <button onclick="removeFromBoard('${c.code}')" title="remove">✕</button></td>
+    </tr>`;
+  }).join('');
+  body.innerHTML=`<table><thead><tr><th>Course</th><th>Rating</th><th>Load</th><th>Meets</th><th>Decision</th></tr></thead><tbody>${rows}</tbody></table>`;
+  // summary: total workload of kept + conflict count
+  const keptHours = kept.reduce((a,b)=>a+(b.course.avg_hours||0),0);
+  let nConf=0; for(let i=0;i<kept.length;i++) for(let j=i+1;j<kept.length;j++) if(conflicts(kept[i].course.meets,kept[j].course.meets)) nConf++;
+  const over = keptHours>40;
+  sum.style.display='block';
+  sum.innerHTML = `Keeping <b>${kept.length}</b> course${kept.length!==1?'s':''} · total workload
+      <b class="${over?'over':''}">~${keptHours.toFixed(1)} hrs/week</b>${over?' (heavy — consider dropping one)':''}
+      ${nConf?` · <span class="conflict">${nConf} schedule conflict${nConf!==1?'s':''}</span>`:' · no conflicts'}`;
+}
+
+// ---------- wire up ----------
+const EXAMPLES = [
+  "applied CS under 8 hrs/week, mornings free",
+  "intro stats course, well taught",
+  "advanced ML, don't care about workload",
+  "engineering, no Friday classes"
+];
+function renderResults(list){
+  const el=document.getElementById('results');
+  if(!list.length){ el.innerHTML='<p style="color:var(--muted);font-size:.88rem">No matching courses in the dataset yet. Try broader interests, or raise the hours cap.</p>'; return; }
+  el.innerHTML = list.map(r=>{
+    const c=r.course;
+    return `<div class="rec">
+      <div class="top"><div><span class="code">${c.code}</span> <span class="ttl">${c.title||''}</span></div>
+        <button class="add" onclick="addToBoard('${c.code}')">+ compare</button></div>
+      <div class="why">
+        <span class="pill p-rate">${c.course_rating!=null?c.course_rating.toFixed(1)+'★':'—'}</span>
+        <span class="pill p-load">${c.avg_hours!=null?'~'+c.avg_hours.toFixed(1)+' hrs/wk':'—'}</span>
+        <span class="pill p-meet">${c.meets||'—'}</span>
+      </div>
+      <div class="why" style="color:var(--muted)">${r.reasons.join(' · ')}</div>
+    </div>`;
+  }).join('');
+}
+document.getElementById('go').onclick=()=>renderResults(suggest(document.getElementById('q').value||''));
+document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){document.getElementById('go').click();}});
+const exWrap=document.getElementById('examples');
+EXAMPLES.forEach(x=>{ const b=document.createElement('button'); b.textContent=x;
+  b.onclick=()=>{document.getElementById('q').value=x; document.getElementById('go').click();}; exWrap.appendChild(b); });
+
+load();
+</script>
+</body>
+</html>
