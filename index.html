@@ -67,6 +67,11 @@
   .summary b{font-variant-numeric:tabular-nums}
   .summary .over{color:var(--warn)}
   footer{max-width:1200px;margin:0 auto 2rem;padding:1rem 1.25rem;color:var(--muted);font-size:.8rem}
+  .funnel{font-size:.78rem;color:var(--muted);border:1px solid #2a2f3a;border-radius:8px;
+    padding:.5rem .65rem;margin-bottom:.7rem;line-height:1.5}
+  .funnel b{color:#e6e9ef;font-variant-numeric:tabular-nums}
+  .funnel span{opacity:.5;margin:0 .15rem}
+  .funnel-note{margin-top:.25rem;opacity:.75;font-size:.72rem}
 </style>
 </head>
 <body>
@@ -105,27 +110,65 @@
 </footer>
 
 <script>
-// ---------- data load: real (local, gitignored) → public sample fallback ----------
+// ---------- funnel constants ----------
+// The pilot narrows the full catalog in two stages. Both bounds are declared
+// here so the numbers in the README and the UI come from one place.
+const PREFILTER_K = 15;  // deterministic prefilter output (no model involved)
+const FINAL_K     = 5;   // most the ranking stage may ever show
+
+// ---------- data load ----------
+// Base layer  : data/catalog.json — the full public Courses@Brown catalog.
+// Rating layer: courses.local.json (real Critical Review, gitignored) when present,
+//               otherwise courses.sample.json, whose ratings are illustrative.
 let COURSES = [];
+let RATINGS_REAL = false;
+let FUNNEL = {total:0, pool:0, courses:0, candidates:0, shown:0};
+
 async function load(){
   const src = document.getElementById('src');
-  for (const [file, label, illustrative] of [
-        ['data/courses.local.json','real Critical Review data (local)', false],
-        ['data/courses.sample.json','illustrative sample', true]]) {
+  let cat = null;
+  try { const r = await fetch('data/catalog.json', {cache:'no-store'}); if (r.ok) cat = await r.json(); } catch(e){}
+
+  if (cat && cat.rows) {
+    const F = cat.fields;
+    COURSES = cat.rows.map(row => {
+      const o = {}; F.forEach((f,k) => o[f] = row[k]);
+      o.dept = (o.code || '').split(' ')[0];
+      return o;
+    });
+  }
+
+  // overlay ratings/workload where we have them
+  let ratings = null;
+  for (const [file, isReal] of [['data/courses.local.json', true], ['data/courses.sample.json', false]]) {
     try {
-      const r = await fetch(file, {cache:'no-store'});
-      if (!r.ok) continue;
-      COURSES = await r.json();
-      src.textContent = COURSES.length + ' courses · ' + label;
-      if (illustrative) {
-        const b = document.getElementById('banner');
-        b.style.display='block';
-        b.textContent='Demo mode: course codes/titles/times are real (public catalog), but ratings shown here are illustrative — the real Critical Review data runs locally only.';
-      }
-      return;
+      const r = await fetch(file, {cache:'no-store'}); if (!r.ok) continue;
+      const rows = await r.json();
+      ratings = {}; RATINGS_REAL = isReal;
+      rows.forEach(c => { ratings[c.code] = c; });
+      break;
     } catch(e){}
   }
-  src.textContent = 'no data found';
+  if (!COURSES.length && ratings) COURSES = Object.values(ratings).map(c => ({...c, dept: c.dept || (c.code||'').split(' ')[0]}));
+  let rated = 0;
+  if (ratings) COURSES.forEach(c => {
+    const m = ratings[c.code];
+    if (m) { c.course_rating = m.course_rating; c.prof_rating = m.prof_rating; c.avg_hours = m.avg_hours; c.class_size = m.class_size; rated++; }
+  });
+
+  FUNNEL.total = COURSES.length;
+  if (!COURSES.length) { src.textContent = 'no data found'; return; }
+
+  src.textContent = COURSES.length.toLocaleString() + ' sections · ' + (cat ? cat.term : 'local set')
+                  + ' · ' + rated + ' with review data';
+
+  if (!RATINGS_REAL) {
+    const b = document.getElementById('banner');
+    b.style.display = 'block';
+    b.textContent = 'Demo mode: the catalog is real (' + COURSES.length.toLocaleString()
+      + ' Courses@Brown sections, ' + (cat ? cat.term : '') + '), and the prefilter below runs over all of it. '
+      + 'Ratings and workload shown here are illustrative, because the real Critical Review data stays local and is never published.';
+  }
 }
 
 // ---------- meeting-time parsing + conflict detection (deterministic) ----------
@@ -185,7 +228,12 @@ function parseQuery(q){
   if(/\bafternoon/.test(q)) c.days.prefer='pm';
   if(/no friday|friday.?free|avoid friday/.test(q)) c.days.avoid.push('F');
   // interest keywords: dept codes + salient title words
-  const stop = new Set('i im a the to and or of in for with want under over hrs hours hour something course courses class sophomore junior senior freshman year that this like into free my me under'.split(' '));
+  const stop = new Set(('i im a an the to and or of in for with want under over hrs hours hour something '
+    + 'course courses class classes sophomore junior senior freshman year that this like into free my me '
+    + 'dont don doesnt doesn care about need needs looking look take taking really prefer would ideally '
+    + 'any some good best well taught rated advanced intro beginner first foundational upper grad graduate '
+    + 'morning mornings afternoon afternoons monday tuesday wednesday thursday friday workload week weekly '
+    + 'per not no but its it am pm').split(' '));
   c.interests = q.replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>2 && !stop.has(w));
   return c;
 }
@@ -221,14 +269,69 @@ function scoreCourse(course, c){
   if(hits) reasons.push('matches ‘'+c.interests.filter(w=>title.includes(w)||dept===w).slice(0,2).join(', ')+'’');
   return {course, s, reasons, hits};
 }
+// Stage 1 — deterministic prefilter over the WHOLE catalog.
+// Pure function of (catalog, parsed query). No model, no randomness, no network.
+// Narrows ~5,600 sections to at most PREFILTER_K candidates.
+function prefilter(c){
+  let pool = COURSES;
+  if (c.maxHours != null) pool = pool.filter(co => co.avg_hours == null || co.avg_hours <= c.maxHours);
+  if (c.days.avoid.length) pool = pool.filter(co => {
+    const m = parseMeets(co.meets);
+    return !m.some(mt => mt.days.some(d => c.days.avoid.includes(d)));
+  });
+  if (c.level === 'intro')    pool = pool.filter(co => NUM(co) <  1000);
+  if (c.level === 'advanced') pool = pool.filter(co => NUM(co) >= 1000);
+  if (c.interests.length) {
+    const matched = pool.filter(co => {
+      const t = (co.title||'').toLowerCase(), d = (co.dept||'').toLowerCase();
+      return c.interests.some(w => d === w || t.includes(w));
+    });
+    if (matched.length) pool = matched;
+  }
+  FUNNEL.pool = pool.length;
+
+  // The catalog is sections, but a recommendation should be a course. Collapse
+  // multiple sections of one course to a single representative: prefer a real
+  // meeting time over TBA, then the lowest section number. Deterministic.
+  const rankSection = co => (co.meets && co.meets !== 'TBA' ? '0' : '1') + '|' + (co.section || 'zz');
+  const byCode = new Map();
+  for (const co of pool) {
+    const prev = byCode.get(co.code);
+    if (!prev || rankSection(co) < rankSection(prev)) byCode.set(co.code, co);
+  }
+  pool = [...byCode.values()];
+  FUNNEL.courses = pool.length;
+
+  const keyed = pool.map(co => {
+    const t = (co.title||'').toLowerCase(), d = (co.dept||'').toLowerCase();
+    let k = 0;
+    for (const w of c.interests) { if (d === w) k += 4; else if (t.includes(w)) k += 3; }
+    k += (co.course_rating || 0) * (c.wantRated ? 1.6 : 1);
+    if (c.maxHours != null && co.avg_hours != null) k += 1.5;
+    return {co, k};
+  });
+  // deterministic order: score desc, then course code asc so ties never vary run to run
+  keyed.sort((a,b) => b.k - a.k || (a.co.code < b.co.code ? -1 : a.co.code > b.co.code ? 1 : 0));
+  return keyed.slice(0, PREFILTER_K).map(x => x.co);
+}
+
+// Stage 2 — ranking, capped at FINAL_K. In the gated pilot an LLM orders these
+// candidates and the server re-attaches the authoritative ratings afterwards, so
+// a model can never emit a number that is not in the data. This keyless public
+// build runs the same cap with the local scorer in place of the model.
+function rank(cands, c){
+  const scored = cands.map(co => scoreCourse(co, c)).filter(Boolean);
+  scored.sort((a,b) => b.s - a.s || (a.course.code < b.course.code ? -1 : a.course.code > b.course.code ? 1 : 0));
+  return scored.slice(0, FINAL_K);
+}
+
 function suggest(q){
   const c = parseQuery(q);
-  let scored = COURSES.map(co=>scoreCourse(co,c)).filter(Boolean);
-  // if they named interests, require at least one hit; else fall back to top-rated
-  if(c.interests.some(w=>COURSES.some(co=>co.dept.toLowerCase()===w||(co.title||'').toLowerCase().includes(w))))
-    scored = scored.filter(r=>r.hits>0);
-  scored.sort((a,b)=>b.s-a.s);
-  return scored.slice(0,6);
+  const candidates = prefilter(c);
+  const out = rank(candidates, c);
+  FUNNEL.candidates = candidates.length;
+  FUNNEL.shown = out.length;
+  return out;
 }
 
 // ---------- shortlist / decision board ----------
@@ -278,10 +381,21 @@ const EXAMPLES = [
   "advanced ML, don't care about workload",
   "engineering, no Friday classes"
 ];
+function funnelLine(){
+  const f = FUNNEL;
+  return `<div class="funnel">
+    <b>${f.total.toLocaleString()}</b> sections
+    <span>&rsaquo;</span> <b>${f.pool.toLocaleString()}</b> pass the filters
+    <span>&rsaquo;</span> <b>${(f.courses||0).toLocaleString()}</b> distinct courses
+    <span>&rsaquo;</span> <b>${f.candidates}</b> candidates
+    <span>&rsaquo;</span> <b>${f.shown}</b> shown
+    <div class="funnel-note">Filters and the cut to ${PREFILTER_K} run in plain code, same answer every time. Ranking is capped at ${FINAL_K}.</div>
+  </div>`;
+}
 function renderResults(list){
   const el=document.getElementById('results');
-  if(!list.length){ el.innerHTML='<p style="color:var(--muted);font-size:.88rem">No matching courses in the dataset yet. Try broader interests, or raise the hours cap.</p>'; return; }
-  el.innerHTML = list.map(r=>{
+  if(!list.length){ el.innerHTML=funnelLine()+'<p style="color:var(--muted);font-size:.88rem">No matching courses in the dataset yet. Try broader interests, or raise the hours cap.</p>'; return; }
+  el.innerHTML = funnelLine() + list.map(r=>{
     const c=r.course;
     return `<div class="rec">
       <div class="top"><div><span class="code">${c.code}</span> <span class="ttl">${c.title||''}</span></div>
