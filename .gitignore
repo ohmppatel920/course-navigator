@@ -1,4 +1,4 @@
-# Real Critical Review–derived data stays local — never published.
+# Real Critical Review-derived data stays local and is never published.
 # The public repo / hosted demo ships a derived sample only.
 data/courses.real.json
 data/cr_catalog_raw.json

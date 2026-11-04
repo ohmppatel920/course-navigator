@@ -1,17 +1,17 @@
-# Cairn — a Brown course-decision copilot
+# Cairn: a Brown course-decision copilot
 
 *Working title.* Turn Brown's overwhelming shopping period into a decision: describe what
 you want, get **grounded** course suggestions (quality · workload · fit), then compare them
-on a board that flags **schedule conflicts** and **total workload** — so you keep the right
-four courses, not the first four you tried.
+on a board that flags **schedule conflicts** and **total workload**, so the four you keep are
+the four you actually wanted.
 
 **Why:** Brown's open curriculum offers ~5,600 sections with no requirements to narrow them.
-The signals that actually drive the decision — professor quality, workload, schedule fit —
-are scattered across the Critical Review, Courses@Brown, and group chats. Cairn combines them.
+The signals that actually drive the decision (professor quality, workload, schedule fit) are
+scattered across the Critical Review, Courses@Brown, and group chats. Cairn combines them.
 
 See [`docs/PRD.md`](docs/PRD.md) for the full product spec (problem, user, metrics, AI eval plan).
 
-## Status — MVP (working)
+## Status: MVP (working)
 
 - ✅ **Full catalog**: the demo loads all **5,628 sections** of Brown's Fall 2026 catalog
   (113 subjects, 1,760 distinct courses) from the public Courses@Brown catalog, pulled 3 Nov 2026
@@ -20,10 +20,23 @@ See [`docs/PRD.md`](docs/PRD.md) for the full product spec (problem, user, metri
   named constants (`PREFILTER_K`, `FINAL_K`) at the top of the script
 - ✅ **Discovery**: describe your constraints → ranked, **grounded** suggestions (never invents a rating)
 - ✅ **Decision board**: keep / maybe / drop, with rating · workload · meeting time
-- ✅ **Schedule-conflict detection** — exact, computed from meeting times (not guessed)
+- ✅ **Schedule-conflict detection**, computed exactly from meeting times rather than guessed
 - ✅ **Total-workload** tally with a heavy-load warning
-- ⏳ Next: natural-language chat via an LLM (deterministic ranker works today, keyless);
+- ⏳ Next: natural-language chat via an LLM (the deterministic ranker works today, keyless);
   pilot with classmates
+
+## Two deployments
+
+| | This repo (public demo) | [cairn-pilot](https://cairn-pilot.vercel.app) (pilot) |
+|---|---|---|
+| Catalog | 5,628 sections, real, committed | 5,407 sections, real, refetched on every deploy |
+| Ratings | illustrative sample | none loaded yet (permission pending) |
+| Ranking | deterministic, in-browser | deterministic server-side; a key switches on model ranking |
+| Access | open | access code required |
+| Code | here | private repo (it sits beside the real review data) |
+
+Live status for the pilot, including both launch gates, is at
+[`/api/status`](https://cairn-pilot.vercel.app/api/status).
 
 ## The funnel
 
@@ -52,8 +65,8 @@ no review data show `—` rather than an invented number. It's a single static f
 
 ## Data & rights
 
-Ratings/workload are from **The Critical Review**; offerings/times from **Courses@Brown**.
-The real Critical Review data is **local-only and gitignored** — the public repo/demo ships
-a sample with **synthetic ratings** (real, public course codes/titles/times). See
-[`data/README.md`](data/README.md) for the full provenance and the deliberately conservative
-data-rights posture.
+Ratings and workload are from **The Critical Review**; offerings and times from
+**Courses@Brown**. The real Critical Review data is **local-only and gitignored**. The public
+repo and demo ship a sample with **synthetic ratings** over real, public course codes, titles
+and times. See [`data/README.md`](data/README.md) for the full provenance and the deliberately
+conservative data-rights posture.

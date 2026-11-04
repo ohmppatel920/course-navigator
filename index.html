@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cairn — a Brown course-decision copilot</title>
+<title>Cairn: a Brown course-decision copilot</title>
 <style>
   :root{
     --bg:#f4f2ec; --panel:#fffdf8; --ink:#20242b; --muted:#6b7280; --line:#e2ddd2;
@@ -84,7 +84,7 @@
 
 <main>
   <section class="card">
-    <h2>1 · Find courses <small>— tell it what you want</small></h2>
+    <h2>1 · Find courses <small>tell it what you want</small></h2>
     <div class="ask">
       <textarea id="q" placeholder="e.g. I'm a sophomore into CS and stats, want something applied under ~8 hrs/week, mornings free"></textarea>
       <div class="ex" id="examples"></div>
@@ -94,9 +94,9 @@
   </section>
 
   <section class="card">
-    <h2>2 · Decide <small>— keep / maybe / drop</small></h2>
+    <h2>2 · Decide <small>keep / maybe / drop</small></h2>
     <div class="board">
-      <div id="boardBody"><div class="empty">Add courses from the left to compare them here — with schedule conflicts and total workload flagged.</div></div>
+      <div id="boardBody"><div class="empty">Add courses from the left to compare them here, with schedule conflicts and total workload flagged.</div></div>
     </div>
     <div class="summary" id="summary" style="display:none"></div>
   </section>
@@ -117,7 +117,7 @@ const PREFILTER_K = 15;  // deterministic prefilter output (no model involved)
 const FINAL_K     = 5;   // most the ranking stage may ever show
 
 // ---------- data load ----------
-// Base layer  : data/catalog.json — the full public Courses@Brown catalog.
+// Base layer  : data/catalog.json, the full public Courses@Brown catalog.
 // Rating layer: courses.local.json (real Critical Review, gitignored) when present,
 //               otherwise courses.sample.json, whose ratings are illustrative.
 let COURSES = [];
@@ -269,7 +269,7 @@ function scoreCourse(course, c){
   if(hits) reasons.push('matches ‘'+c.interests.filter(w=>title.includes(w)||dept===w).slice(0,2).join(', ')+'’');
   return {course, s, reasons, hits};
 }
-// Stage 1 — deterministic prefilter over the WHOLE catalog.
+// Stage 1: deterministic prefilter over the WHOLE catalog.
 // Pure function of (catalog, parsed query). No model, no randomness, no network.
 // Narrows ~5,600 sections to at most PREFILTER_K candidates.
 function prefilter(c){
@@ -315,7 +315,7 @@ function prefilter(c){
   return keyed.slice(0, PREFILTER_K).map(x => x.co);
 }
 
-// Stage 2 — ranking, capped at FINAL_K. In the gated pilot an LLM orders these
+// Stage 2: ranking, capped at FINAL_K. In the gated pilot an LLM orders these
 // candidates and the server re-attaches the authoritative ratings afterwards, so
 // a model can never emit a number that is not in the data. This keyless public
 // build runs the same cap with the local scorer in place of the model.
@@ -347,7 +347,7 @@ function removeFromBoard(code){ const i=board.findIndex(b=>b.course.code===code)
 
 function renderBoard(){
   const body=document.getElementById('boardBody'), sum=document.getElementById('summary');
-  if(!board.length){ body.innerHTML='<div class="empty">Add courses from the left to compare them here — with schedule conflicts and total workload flagged.</div>'; sum.style.display='none'; return; }
+  if(!board.length){ body.innerHTML='<div class="empty">Add courses from the left to compare them here, with schedule conflicts and total workload flagged.</div>'; sum.style.display='none'; return; }
   const kept = board.filter(b=>b.status!=='drop');
   const rows = board.map(b=>{
     const c=b.course;
@@ -370,7 +370,7 @@ function renderBoard(){
   const over = keptHours>40;
   sum.style.display='block';
   sum.innerHTML = `Keeping <b>${kept.length}</b> course${kept.length!==1?'s':''} · total workload
-      <b class="${over?'over':''}">~${keptHours.toFixed(1)} hrs/week</b>${over?' (heavy — consider dropping one)':''}
+      <b class="${over?'over':''}">~${keptHours.toFixed(1)} hrs/week</b>${over?' (heavy, consider dropping one)':''}
       ${nConf?` · <span class="conflict">${nConf} schedule conflict${nConf!==1?'s':''}</span>`:' · no conflicts'}`;
 }
 
